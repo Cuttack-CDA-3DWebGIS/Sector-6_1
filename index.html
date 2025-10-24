@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Buildings with Dashboard - Cuttack CDA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  width: 100%;
+  font-family: Arial, sans-serif;
+  overflow: hidden;
+}
+
+#container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+#sidePanel {
+  width: 350px;
+  height: 100vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #1E3C72, #2A5298);
+  color: white;
+  padding: 20px;
+  box-sizing: border-box;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+
+#map {
+  width: calc(100vw - 350px);
+  height: 100vh;
+  position: relative;
+}
+
+#sidePanel h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 22px;
+  color: #FFD700;
+  border-bottom: 2px solid #FFD700;
+  padding-bottom: 10px;
+}
+
+#sidePanel input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 5px;
+  border: none;
+  margin-bottom: 15px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+button {
+  width: 100%;
+  padding: 8px;
+  margin: 5px 0;
+  border-radius: 5px;
+  border: none;
+  background-color: #FFD700;
+  color: #1E3C72;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.3s;
+  box-sizing: border-box;
+}
+
+button:hover { 
+  background-color: #FFC107; 
+}
+
+.reset-btn {
+  background-color: #FF6B6B !important;
+  color: white !important;
+  margin-top: 15px !important;
+}
+
+.reset-btn:hover {
+  background-color: #FF5252 !important;
+}
+
+.stat-card {
+  background: rgba(255,255,255,0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+canvas {
+  width: 100% !important;
+  height: 240px !important;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+#layerControl {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255,255,255,0.9);
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1000;
+}
+
+.maplibregl-map {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.maplibregl-popup-content {
+  padding: 15px 20px 10px 15px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+}
+
+.maplibregl-popup-close-button {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 16px !important;
+  font-weight: bold !important;
+  color: #666 !important;
+  background: none !important;
+  border: none !important;
+  cursor: pointer !important;
+  z-index: 1001 !important;
+}
+
+.maplibregl-popup-close-button:hover {
+  color: #000 !important;
+  background-color: #f0f0f0 !important;
+  border-radius: 50% !important;
+}
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="sidePanel">
+    <h2>Cuttack CDA Dashboard</h2>
+    <input type="text" id="searchBox" placeholder="Search Plotno..." />
+    
+    <div id="stats">
+      <div class="stat-card" id="stat1">Loading...</div>
+      <div class="stat-card" id="stat2">Loading...</div>
+      <div class="stat-card" id="stat3">Loading...</div>
+      <div class="stat-card" id="stat4">Loading...</div>
+      <div class="stat-card" id="stat5">Loading...</div>
+    </div>
+    
+    <canvas id="pieChart"></canvas>
+    
+    <div id="buttons">
+      <button id="propertyBtn">Property Type Analysis</button>
+      <button id="floodBtn">Flood Prone Analysis</button>
+      <button id="taxBtn">Tax Category Analysis</button>
+      <button id="transferBtn">Transfer Status Analysis</button>
+      <button id="resetBtn" class="reset-btn">Reset Filter</button>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div id="layerControl">
+  <label><input type="checkbox" id="toggleBuildings" checked> Buildings Layer</label><br>
+  <label><input type="checkbox" id="toggleBoundary" checked> Boundary Layer</label><br>
+  <label><input type="checkbox" id="toggleDrone" checked> Drone Imagery</label>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// Map Initialization
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: { 
+      'osm-tiles': { 
+        type: 'raster', 
+        tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], 
+        tileSize: 256 
+      },
+      'drone-imagery': {
+        type: 'raster',
+        tiles: ['https://api.maptiler.com/tiles/019a14b4-413f-736d-9130-741d058813a0/{z}/{x}/{y}.webp?key=iiDiCNtltULakAeDPrqx'],
+        tileSize: 256
+      }
+    },
+    layers: [
+      { 
+        id: 'osm-layer', 
+        type: 'raster', 
+        source: 'osm-tiles' 
+      },
+      {
+        id: 'drone-layer',
+        type: 'raster',
+        source: 'drone-imagery',
+        paint: {
+          'raster-opacity': 1
+        }
+      }
+    ]
+  },
+  center: [85.84, 20.477],
+  zoom: 17,
+  pitch: 60,
+  bearing: -17.6
+});
+
+// Data & Chart variables
+let buildingsData, pieChart, selectedFeatures = [], currentField = 'Type_of_al';
+
+// Floor height mapping (in meters)
+const floorHeights = {
+  'G': 3,
+  'G+1': 6,
+  'G+2': 9,
+  'G+3': 12,
+  'G+4': 15
+};
+
+// Color schemes
+const propertyColors = { 
+  'Commercial': '#FF6384',
+  'Residential': '#36A2EB',
+  'Mixed Use': '#FFCE56',
+  'Institutional': '#8AFF33',
+  'Vacant': '#AA33FF' 
+};
+const floodColors = { 
+  'Yes': '#FF0000',
+  'No': '#00FF00',
+  'Unknown': '#AAAAAA' 
+};
+const taxColors = { 
+  'Yes': '#00FF00',
+  'No': '#FF0000' 
+};
+const transferColors = { 
+  'Yes': '#4CAF50',
+  'No': '#F44336' 
+};
+
+async function loadData() {
+  try {
+    const buildingsUrl = 'https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sector6_Buildings-Ortho2.geojson';
+    const boundaryUrl = 'https://raw.githubusercontent.com/hemanya2003/CDA/main/CDA_Boundary.geojson';
+    
+    console.log('Loading data...');
+    buildingsData = await fetch(buildingsUrl).then(res => res.json());
+    const boundaryData = await fetch(boundaryUrl).then(res => res.json());
+    console.log('Data loaded successfully');
+
+    // Add buildings layer
+    map.addSource('buildings', { type: 'geojson', data: buildingsData });
+    map.addLayer({
+      id: 'buildings-3d',
+      type: 'fill-extrusion',
+      source: 'buildings',
+      paint: {
+        'fill-extrusion-color': [
+          'match',
+          ['get', 'Type_of_al'],
+          'Commercial', propertyColors['Commercial'],
+          'Residential', propertyColors['Residential'],
+          'Mixed Use', propertyColors['Mixed Use'],
+          'Institutional', propertyColors['Institutional'],
+          'Vacant', propertyColors['Vacant'],
+          '#888888'
+        ],
+        'fill-extrusion-height': [
+          'match',
+          ['get', 'FLOORS'],
+          'G', floorHeights['G'],
+          'G+1', floorHeights['G+1'],
+          'G+2', floorHeights['G+2'],
+          'G+3', floorHeights['G+3'],
+          'G+4', floorHeights['G+4'],
+          3
+        ],
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': 0.8
+      }
+    });
+
+    // Add boundary layer
+    map.addSource('boundary', { type: 'geojson', data: boundaryData });
+    map.addLayer({
+      id: 'boundary-extrusion',
+      type: 'fill-extrusion',
+      source: 'boundary',
+      paint: {
+        'fill-extrusion-color': 'rgba(0,0,0,0)',
+        'fill-extrusion-height': 20,
+        'fill-extrusion-opacity': 0
+      }
+    });
+    map.addLayer({
+      id: 'boundary-line',
+      type: 'line',
+      source: 'boundary',
+      paint: {
+        'line-color': 'brown',
+        'line-width': 8
+      }
+    });
+
+    createPieChart();
+    updateDashboard(buildingsData.features, 'Type_of_al');
+
+    setTimeout(() => {
+      map.resize();
+      console.log('Map resized');
+    }, 200);
+
+  } catch (error) {
+    console.error('Error loading data:', error);
+    document.getElementById('stat1').textContent = 'Error loading data';
+  }
+}
+
+// Layer control
+document.getElementById('toggleBuildings').addEventListener('change', e => {
+  map.setLayoutProperty('buildings-3d', 'visibility', e.target.checked ? 'visible' : 'none');
+});
+
+document.getElementById('toggleBoundary').addEventListener('change', e => {
+  map.setLayoutProperty('boundary-extrusion', 'visibility', e.target.checked ? 'visible' : 'none');
+  map.setLayoutProperty('boundary-line', 'visibility', e.target.checked ? 'visible' : 'none');
+});
+
+document.getElementById('toggleDrone').addEventListener('change', e => {
+  map.setPaintProperty('drone-layer', 'raster-opacity', e.target.checked ? 1 : 0);
+});
+
+// Charts
+function createPieChart() {
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  pieChart = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        backgroundColor: []
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { 
+            color: '#ffffff',
+            font: {
+              size: 25,
+              weight: 'bold',
+              family: 'Arial, sans-serif'
+            },
+            padding: 20,
+            usePointStyle: true,
+            pointStyle: 'rectRot'
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.9)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: '#fff',
+          borderWidth: 2,
+          titleFont: {
+            size: 14,
+            weight: 'bold'
+          },
+          bodyFont: {
+            size: 13,
+            weight: 'bold'
+          }
+        }
+      },
+      layout: {
+        padding: {
+          top: 10,
+          bottom: 15,
+          left: 5,
+          right: 5
+        }
+      }
+    }
+  });
+}
+
+function updatePieChart(labels, data, colors) {
+  pieChart.data.labels = labels;
+  pieChart.data.datasets[0].data = data;
+  pieChart.data.datasets[0].backgroundColor = colors;
+  pieChart.update();
+}
+
+// Dashboard
+function updateDashboard(features, field) {
+  const allBuildingsData = buildingsData ? buildingsData.features : features;
+  const counts = {};
+  
+  allBuildingsData.forEach(f => {
+    let val = f.properties[field];
+    if (val !== undefined && val !== null) {
+      counts[val] = (counts[val] || 0) + 1;
+    }
+  });
+
+  const labels = Object.keys(counts);
+  const data = Object.values(counts);
+  let colors = [];
+  
+  if (field === 'Type_of_al') colors = labels.map(l => propertyColors[l] || '#888888');
+  if (field === 'Flood_Pron') colors = labels.map(l => floodColors[l] || '#888888');
+  if (field === 'Tax_Catego') colors = labels.map(l => taxColors[l] || '#888888');
+  if (field === 'Status_of') colors = labels.map(l => transferColors[l] || '#888888');
+
+  const displayFeatures = features.length > 0 ? features : allBuildingsData;
+  const displayCounts = {};
+  displayFeatures.forEach(f => {
+    let val = f.properties[field];
+    if (val !== undefined && val !== null) {
+      displayCounts[val] = (displayCounts[val] || 0) + 1;
+    }
+  });
+  
+  const displayLabels = Object.keys(displayCounts);
+  const displayData = Object.values(displayCounts);
+  
+  ['stat1', 'stat2', 'stat3', 'stat4', 'stat5'].forEach((id, i) => {
+    document.getElementById(id).textContent = displayLabels[i] ? `${displayLabels[i]}: ${displayData[i]}` : '';
+  });
+  
+  updatePieChart(labels, data, colors);
+}
+
+// Highlight buildings by field
+function highlightByField(field) {
+  let paintExpr = ['match', ['get', field]];
+  
+  if (field === 'Type_of_al') {
+    Object.keys(propertyColors).forEach(k => {
+      paintExpr.push(k, propertyColors[k]);
+    });
+    paintExpr.push('#888888');
+  } else if (field === 'Flood_Pron') {
+    Object.keys(floodColors).forEach(k => {
+      paintExpr.push(k, floodColors[k]);
+    });
+    paintExpr.push('#888888');
+  } else if (field === 'Tax_Catego') {
+    Object.keys(taxColors).forEach(k => {
+      paintExpr.push(k, taxColors[k]);
+    });
+    paintExpr.push('#888888');
+  } else if (field === 'Status_of') {
+    Object.keys(transferColors).forEach(k => {
+      paintExpr.push(k, transferColors[k]);
+    });
+    paintExpr.push('#888888');
+  }
+  
+  map.setPaintProperty('buildings-3d', 'fill-extrusion-color', paintExpr);
+}
+
+// Search functionality
+document.getElementById('searchBox').addEventListener('input', e => {
+  const query = e.target.value.trim();
+  if (!buildingsData) return;
+  
+  if (query === '') {
+    selectedFeatures = [];
+    if (currentField && currentField !== 'reset') {
+      highlightByField(currentField);
+      updateDashboard(buildingsData.features, currentField);
+    } else {
+      map.setPaintProperty('buildings-3d', 'fill-extrusion-color', [
+        'interpolate',
+        ['linear'],
+        ['get', 'FLOORS'],
+        'G', 'lightgray',
+        'G+1', 'royalblue',
+        'G+2', 'lightblue',
+        'G+3', 'orange',
+        'G+4', 'red'
+      ]);
+      ['stat1', 'stat2', 'stat3', 'stat4', 'stat5'].forEach(id => {
+        document.getElementById(id).textContent = '';
+      });
+    }
+  } else {
+    selectedFeatures = buildingsData.features.filter(f => {
+      if (f.properties.Plotno) {
+        const plotNo = f.properties.Plotno.toString().toUpperCase();
+        const searchQuery = query.toUpperCase();
+        
+        return plotNo.includes(searchQuery) ||
+               plotNo.replace('PLOT-', '').includes(searchQuery) ||
+               plotNo.replace('-', '').includes(searchQuery) ||
+               plotNo.replace('PLOT-0', '').includes(searchQuery) ||
+               plotNo.replace('PLOT-', '').replace(/^0+/, '').includes(searchQuery);
+      }
+      return false;
+    });
+    
+    if (selectedFeatures.length > 0) {
+      const foundPlotIds = selectedFeatures.map(f => f.properties.Plotno);
+      
+      map.setPaintProperty('buildings-3d', 'fill-extrusion-color', [
+        'case',
+        ['in', ['get', 'Plotno'], ['literal', foundPlotIds]],
+        '#FF0000',
+        '#CCCCCC'
+      ]);
+      
+      const coords = selectedFeatures[0].geometry.coordinates[0];
+      if (coords && coords.length > 0) {
+        map.flyTo({ 
+          center: coords[0], 
+          zoom: 19,
+          pitch: 60,
+          bearing: -17.6
+        });
+      }
+      
+      const feature = selectedFeatures[0];
+      const props = feature.properties;
+      const fieldsToShow = [
+        { key: 'Plotno', label: 'Plot No' },
+        { key: 'Owner_Name', label: 'Owner Name' },
+        { key: 'Contact_Nu', label: 'Contact No' },
+        { key: 'Occupancy_', label: 'Occupancy' }
+      ];
+      
+      fieldsToShow.forEach((field, index) => {
+        const statId = `stat${index + 1}`;
+        const value = props[field.key];
+        if (value !== undefined && value !== null && value !== '') {
+          document.getElementById(statId).innerHTML = `<strong>${field.label}:</strong> ${value}`;
+        } else {
+          document.getElementById(statId).innerHTML = `<strong>${field.label}:</strong> N/A`;
+        }
+      });
+      
+      for (let i = fieldsToShow.length; i < 5; i++) {
+        document.getElementById(`stat${i + 1}`).textContent = '';
+      }
+      
+    } else {
+      if (currentField && currentField !== 'reset') {
+        highlightByField(currentField);
+        updateDashboard(buildingsData.features, currentField);
+      } else {
+        map.setPaintProperty('buildings-3d', 'fill-extrusion-color', [
+          'interpolate',
+          ['linear'],
+          ['get', 'FLOORS'],
+          'G', 'lightgray',
+          'G+1', 'royalblue',
+          'G+2', 'lightblue',
+          'G+3', 'orange',
+          'G+4', 'red'
+        ]);
+        ['stat1', 'stat2', 'stat3', 'stat4', 'stat5'].forEach(id => {
+          document.getElementById(id).textContent = 'No results found';
+        });
+      }
+    }
+  }
+});
+
+// Map event handlers
+let currentPopup = null;
+
+map.on('click', 'buildings-3d', e => {
+  const feature = e.features[0];
+  
+  if (currentPopup) {
+    currentPopup.remove();
+  }
+  
+  const props = feature.properties;
+  const fieldsToShow = ['Plotno', 'Owner_Name', 'Contact_Nu', 'Occupancy_', 'Type_of_al', 'Tax_Catego', 'Status_of', 'FLOORS'];
+  let html = '';
+  
+  fieldsToShow.forEach(field => {
+    if (props[field] !== undefined && props[field] !== null) {
+      html += `<b>${field}:</b> ${props[field]}<br>`;
+    }
+  });
+  
+  currentPopup = new maplibregl.Popup({
+    closeButton: true,
+    closeOnClick: true
+  })
+    .setLngLat(e.lngLat)
+    .setHTML(html)
+    .addTo(map);
+  
+  currentPopup.on('close', () => {
+    currentPopup = null;
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && currentPopup) {
+    currentPopup.remove();
+    currentPopup = null;
+  }
+});
+
+map.on('mouseenter', 'buildings-3d', () => {
+  map.getCanvas().style.cursor = 'pointer';
+});
+
+map.on('mouseleave', 'buildings-3d', () => {
+  map.getCanvas().style.cursor = '';
+});
+
+// Reset Filter Button
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('searchBox').value = '';
+  selectedFeatures = [];
+  map.setPaintProperty('buildings-3d', 'fill-extrusion-color', [
+    'interpolate',
+    ['linear'],
+    ['get', 'FLOORS'],
+    'G', 'lightgray',
+    'G+1', 'royalblue',
+    'G+2', 'lightblue',
+    'G+3', 'orange',
+    'G+4', 'red'
+  ]);
+  currentField = 'reset';
+  updateDashboard(buildingsData.features, 'Type_of_al');
+  map.flyTo({
+    center: [85.84, 20.477],
+    zoom: 17,
+    pitch: 60,
+    bearing: -17.6
+  });
+});
+
+// Analysis buttons
+document.getElementById('propertyBtn').addEventListener('click', () => {
+  currentField = 'Type_of_al';
+  highlightByField('Type_of_al');
+  updateDashboard(selectedFeatures.length > 0 ? selectedFeatures : buildingsData.features, 'Type_of_al');
+});
+
+document.getElementById('floodBtn').addEventListener('click', () => {
+  currentField = 'Flood_Pron';
+  highlightByField('Flood_Pron');
+  updateDashboard(selectedFeatures.length > 0 ? selectedFeatures : buildingsData.features, 'Flood_Pron');
+});
+
+document.getElementById('taxBtn').addEventListener('click', () => {
+  currentField = 'Tax_Catego';
+  highlightByField('Tax_Catego');
+  updateDashboard(selectedFeatures.length > 0 ? selectedFeatures : buildingsData.features, 'Tax_Catego');
+});
+
+document.getElementById('transferBtn').addEventListener('click', () => {
+  currentField = 'Status_of';
+  highlightByField('Status_of');
+  updateDashboard(selectedFeatures.length > 0 ? selectedFeatures : buildingsData.features, 'Status_of');
+});
+
+// Initialize map when loaded
+map.on('load', () => {
+  console.log('Map loaded, loading data...');
+  loadData();
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  setTimeout(() => map.resize(), 100);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (map) map.resize();
+  }, 500);
+});
+</script>
+</body>
+</html>
