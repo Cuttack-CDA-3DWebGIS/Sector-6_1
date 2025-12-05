@@ -541,11 +541,13 @@ map.on('load', async () => {
     const bUrl = 'https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Buildings.geojson';
     const rUrl = 'https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Road.geojson';
     const sUrl = 'https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Street_Light.geojson';
+	  const boundaryUrl = 'https://raw.githubusercontent.com/hemanya2003/CDA/main/CDA_Boundary.geojson'; // unchanged
     // If you want to test offline: put Sec6_Buildings.geojson etc in same folder and change above to './Sec6_Buildings.geojson'
 
     buildingsGeo = await fetchJSON(bUrl);
     const roadsGeo = await fetchJSON(rUrl);
     const streetGeo = await fetchJSON(sUrl);
+	const boundaryData = await fetch(boundaryUrl).then(res => res.json());
     buildingsData = buildingsGeo;
 
     map.addSource('buildings', { type:'geojson', data: buildingsGeo });
@@ -763,6 +765,27 @@ setTimeout(() => {
         'fill-extrusion-color': DEFAULT_BUILDING_COLOR,
         'fill-extrusion-height': buildHeightExpression(),
         'fill-extrusion-opacity': 0.85
+      }
+    });
+	  // BOUNDARY (unchanged)
+    map.addSource('boundary', { type: 'geojson', data: boundaryData });
+    map.addLayer({
+      id: 'boundary-extrusion',
+      type: 'fill-extrusion',
+      source: 'boundary',
+      paint: {
+        'fill-extrusion-color': 'rgba(0,0,0,0)',
+        'fill-extrusion-height': 20,
+        'fill-extrusion-opacity': 0
+      }
+    });
+    map.addLayer({
+      id: 'boundary-line',
+      type: 'line',
+      source: 'boundary',
+      paint: {
+        'line-color': 'brown',
+        'line-width': 8
       }
     });
 
@@ -2129,3 +2152,4 @@ document.getElementById('exportPNG').addEventListener('click', exportMapPNG);
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBwJnprg61M8EWryIBQxT1_f3qxueLfQic&v=weekly" async defer></script>
 </body>
 </html>
+
