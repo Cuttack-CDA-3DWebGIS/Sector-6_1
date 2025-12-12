@@ -758,6 +758,81 @@ setTimeout(() => {
   } catch (e) { console.warn(e); }
 }, 800);
 
+// ---------------- LANDUSE (robust add + ordering) ----------------
+(async function addLanduseSafely(){
+  const landuseUrl = "https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Landuse.geojson";
+  try {
+    const resp = await fetch(landuseUrl);
+    if (!resp.ok) throw new Error('Landuse fetch failed: ' + resp.status);
+    const landGeo = await resp.json();
+
+    // add source (or setData if it already exists)
+    if (!map.getSource('landuse')) {
+      map.addSource('landuse', { type: 'geojson', data: landGeo });
+    } else {
+      map.getSource('landuse').setData(landGeo);
+    }
+
+    // prepare layer definition (no guaranteed insertion point)
+    const landLayerDef = {
+      id: "landuse-fill",
+      type: "fill",
+      source: "landuse",
+      paint: {
+        "fill-color": [
+          "match",
+          ["get", "Class"],
+          "Residential",             "#A8E6A3",
+          "Commercial",              "#FF7676",
+          "Educational",             "#FFD84D",
+          "Govt",                    "#B27CFF",
+          "Public and semi public",  "#72D2A6",
+          "Recreational",            "#6EC9FF",
+          "Transportation",          "#E7A36F",
+          "Vacant Land",             "#F4E7A1",
+          "Waterbodies",             "#4DC3FF",
+          /* default */              "#CCCCCC"
+        ],
+        "fill-opacity": 1
+      }
+    };
+
+    // Try to insert before buildings-3d if it already exists
+    if (map.getLayer('buildings-3d')) {
+      try {
+        map.addLayer(landLayerDef, 'buildings-3d'); // insert below buildings
+      } catch (e) {
+        console.warn('Add landuse before buildings failed, adding without target:', e);
+        map.addLayer(landLayerDef);
+      }
+    } else {
+      // buildings not present yet — add layer now, and once buildings are added move landuse below them
+      try { map.addLayer(landLayerDef); } catch(e){ console.warn('Add landuse failed:', e); }
+
+      // when buildings layer appears later, ensure correct order
+      map.on('data', function checkAndMove(e) {
+        // listen until buildings source/layer is ready
+        if (map.getLayer('buildings-3d')) {
+          try {
+            map.moveLayer('landuse-fill', 'buildings-3d'); // move landuse under buildings
+            console.log('Moved landuse-fill before buildings-3d');
+          } catch (err) {
+            console.warn('Could not move landuse-fill:', err);
+          }
+          // remove this listener (only need once)
+          map.off('data', checkAndMove);
+        }
+      });
+    }
+
+    console.log('Landuse added (features:', (landGeo.features||[]).length, ')');
+  } catch (err) {
+    console.error('Landuse load/add error:', err);
+  }
+})();
+
+
+
     // buildings 3d
     map.addLayer({
       id:'buildings-3d', type:'fill-extrusion', source:'buildings',
@@ -767,6 +842,260 @@ setTimeout(() => {
         'fill-extrusion-opacity': 0.85
       }
     });
+	
+	
+	// ----------------- REPLACE previous addLocationsLayer with THIS -----------------
+(async function addLocationsLayer_fixed() {
+  try {
+    const locationsUrl = 'https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Locations_final.geojson';
+
+    // helper to add SVG image (same as before)
+    function addSvgImageId(id, svgString) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => { try { if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: window.devicePixelRatio || 1 }); } catch(e){}; resolve(); };
+        img.onerror = () => { console.warn('SVG load failed for', id); resolve(); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+      });
+    }
+
+    // icons (same shapes as before)
+    const svgIcons = {
+      'loc-atm': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#2b6cb0"/><text x="50%" y="55%" font-size="26" fill="#fff" font-family="Arial" text-anchor="middle" alignment-baseline="middle">₹</text></svg>`,
+      'loc-bank': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#1f9d55"/><path d="M10 44 L54 44 L32 14 Z" fill="#fff" opacity="0.95"/></svg>`,
+      'loc-govt': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#8b5cf6"/><path d="M12 44 L52 44 L32 20 Z" fill="#fff"/></svg>`,
+      'loc-hospital': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#e53e3e"/><rect x="24" y="14" width="16" height="36" rx="2" fill="#fff"/></svg>`,
+      'loc-recreational': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#16a34a"/><circle cx="32" cy="26" r="8" fill="#fff"/></svg>`,
+      'loc-school': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#f59e0b"/><path d="M8 30 L32 14 L56 30 L32 46 Z" fill="#fff"/></svg>`,
+      'loc-temple': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#d97706"/><path d="M12 44 L52 44 L44 28 L20 28 Z" fill="#fff"/></svg>`,
+      'loc-default': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#6b7280"/><text x="50%" y="54%" font-size="20" fill="#fff" font-family="Arial" text-anchor="middle" alignment-baseline="middle">•</text></svg>`
+    };
+
+    // add images
+    await Promise.all(Object.keys(svgIcons).map(k => addSvgImageId(k, svgIcons[k])));
+
+    // fetch geojson
+    const resp = await fetch(locationsUrl);
+    if (!resp.ok) throw new Error('Failed to load locations geojson: ' + resp.status);
+    const geo = await resp.json();
+
+    // add source
+    if (!map.getSource('locations')) {
+      map.addSource('locations', { type: 'geojson', data: geo });
+    } else {
+      map.getSource('locations').setData(geo);
+    }
+
+    // icon-only symbol layer (no icon-translate)
+    if (map.getLayer('locations-symbol')) try { map.removeLayer('locations-symbol'); } catch(e){}
+    map.addLayer({
+      id: 'locations-symbol',
+      type: 'symbol',
+      source: 'locations',
+      layout: {
+        'icon-image': [
+          'match',
+          ['get', 'Type'],
+          'ATM', 'loc-atm',
+          'Bank', 'loc-bank',
+          'Govt', 'loc-govt',
+          'Hospital', 'loc-hospital',
+          'Recreational', 'loc-recreational',
+          'School', 'loc-school',
+          'Temple', 'loc-temple',
+          /* default */ 'loc-default'
+        ],
+        'icon-anchor': 'bottom',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'icon-size': ['interpolate', ['exponential', 1.4], ['zoom'], 12, 0.16, 14, 0.22, 16, 0.36, 18, 0.58]
+      },
+      paint: { 'icon-opacity': 1 }
+    });
+
+// ---------- Replace OLD DOM label block with this: multiline labels + zoom control ----------
+
+// CONFIG: change these to control when labels show
+const MIN_LABEL_ZOOM = 17; // show labels at zoom >= 15
+const MAX_LABEL_ZOOM = 22; // hide above this (optional)
+
+// inject CSS for labels (once)
+(function injectPoiLabelCSS(){
+  if (document.getElementById('poi-label-style')) return;
+  const s = document.createElement('style');
+  s.id = 'poi-label-style';
+  s.innerHTML = `
+  .poi-label {
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    background: rgba(255,255,255,0.95);
+    padding: 6px 8px;
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    color: #08306b;
+    font-weight: 700;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 160px;              /* control wrapping width */
+    line-height: 1.15;
+    pointer-events: auto;
+    transform: translateY(-8px);
+    display: inline-block;
+    overflow: hidden;
+  }
+  .poi-label .lbl-text {
+    display: block;
+    max-height: calc(1.15em * 3);  /* approx 3 lines */
+    overflow: hidden;
+  }
+  `;
+  document.head.appendChild(s);
+})();
+
+// clear previous markers if any
+if (!window._poi_label_markers) window._poi_label_markers = [];
+window._poi_label_markers.forEach(m => { try { m.remove(); } catch(e){} });
+window._poi_label_markers = [];
+
+// helper to create wrapped label DOM element
+function createWrappedLabelEl(text) {
+  const el = document.createElement('div');
+  el.className = 'poi-label';
+  const span = document.createElement('span');
+  span.className = 'lbl-text';
+  span.textContent = text;
+  el.appendChild(span);
+  return el;
+}
+
+// create DOM markers for each feature (store them to toggle visibility)
+(geo.features || []).forEach(f => {
+  try {
+    const props = f.properties || {};
+    const coords = (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) ? f.geometry.coordinates : null;
+    if (!coords) return;
+    const txt = props.name || props.Name || '';
+    if (!txt) return;
+
+// Use global zoom threshold — set MIN_LABEL_ZOOM above to control when labels appear
+const minZ = MIN_LABEL_ZOOM;          // no per-feature override; labels will be OFF when zoom < MIN_LABEL_ZOOM
+const maxZ = (props.label_max_zoom !== undefined) ? Number(props.label_max_zoom) : MAX_LABEL_ZOOM;
+
+
+    const el = createWrappedLabelEl(txt);
+    el.dataset.minZoom = String(minZ);
+    el.dataset.maxZoom = String(maxZ);
+
+    // click on label opens same popup (optional)
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const html = `<div style="font-weight:800;color:#0b63b8">${props.name || props.Name || 'N/A'}</div>
+                    <div style="font-size:13px;margin-top:6px">${props.Type ? ('Type: ' + props.Type) : ''}</div>`;
+      new maplibregl.Popup({ offset: 12 }).setLngLat([coords[0], coords[1]]).setHTML(html).addTo(map);
+    });
+
+    const marker = new maplibregl.Marker({ element: el, anchor: 'top' })
+      .setLngLat([coords[0], coords[1]])
+      .addTo(map);
+
+    marker._labelMinZoom = minZ;
+    marker._labelMaxZoom = maxZ;
+    window._poi_label_markers.push(marker);
+
+  } catch (err) {
+    console.warn('Label marker create failed', err);
+  }
+});
+
+// update label visibility based on current zoom
+function updatePoiLabelVisibility() {
+  try {
+    const z = map.getZoom();
+    window._poi_label_markers.forEach(m => {
+      try {
+        const el = m.getElement();
+        const minZ = (typeof m._labelMinZoom === 'number') ? m._labelMinZoom : MIN_LABEL_ZOOM;
+        const maxZ = (typeof m._labelMaxZoom === 'number') ? m._labelMaxZoom : MAX_LABEL_ZOOM;
+        if (z >= minZ && z <= maxZ) {
+          if (!el.parentNode) m.addTo(map);
+          el.style.display = 'inline-block';
+        } else {
+          el.style.display = 'none';
+        }
+      } catch (e) { /* ignore per marker error */ }
+    });
+  } catch (e) { console.warn('updatePoiLabelVisibility error', e); }
+}
+
+// initial set and updates on zoom/move (throttled)
+updatePoiLabelVisibility();
+let _poi_label_zoom_timer = null;
+map.on('zoom', () => {
+  if (_poi_label_zoom_timer) clearTimeout(_poi_label_zoom_timer);
+  _poi_label_zoom_timer = setTimeout(updatePoiLabelVisibility, 90);
+});
+map.on('move', () => {
+  if (_poi_label_zoom_timer) clearTimeout(_poi_label_zoom_timer);
+  _poi_label_zoom_timer = setTimeout(updatePoiLabelVisibility, 120);
+});
+
+// ---------- end replacement block ----------
+
+
+    // Add toggle to UI to control both icons (layer) and DOM labels
+    (function addToggle() {
+      try {
+        const layerList = document.getElementById('layerList');
+        if (!layerList) return;
+        if (!document.getElementById('toggleLocations')) {
+          const label = document.createElement('label');
+          label.style.display = 'flex'; label.style.alignItems = 'center';
+          label.innerHTML = `<input type="checkbox" id="toggleLocations" checked style="margin-right:8px"> Locations`;
+          layerList.appendChild(label);
+          document.getElementById('toggleLocations').addEventListener('change', function() {
+            const visible = this.checked;
+            try { if (map.getLayer('locations-symbol')) map.setLayoutProperty('locations-symbol', 'visibility', visible ? 'visible' : 'none'); } catch(e){}
+            // show/hide DOM markers
+            window._poi_label_markers.forEach(m => {
+              try { if (visible) m.addTo(map); else m.remove(); } catch(e){}
+            });
+          });
+        }
+      } catch(e){}
+    })();
+
+    // Move layers to top after style settle — try-catch because some layers may not exist yet
+    map.once('idle', () => {
+      try { if (map.getLayer('locations-symbol')) map.moveLayer('locations-symbol'); } catch(e){}
+      // DOM markers do not participate in layer order, they float over the map canvas.
+      console.log('Locations layers moved to top (icons + DOM labels).');
+    });
+
+    // popup on icon click
+    map.on('click', 'locations-symbol', (e) => {
+      try {
+        const feat = e.features && e.features[0];
+        if (!feat) return;
+        const p = feat.properties || {};
+        const html = `<div style="font-weight:800;color:#0b63b8">${p.name || p.Name || 'N/A'}</div><div style="margin-top:6px">${p.Type || ''}</div>`;
+        new maplibregl.Popup({ offset: 12 }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+      } catch(e){}
+    });
+
+    // cursor pointer
+    map.on('mouseenter', 'locations-symbol', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'locations-symbol', () => map.getCanvas().style.cursor = '');
+
+    // store for debugging
+    log('Locations added (icons layer + ' + window._poi_label_markers.length + ' DOM labels).');
+
+  } catch (err) {
+    log('Add locations FAILED: ' + (err && err.message ? err.message : err));
+  }
+})();
+
+
 	  // BOUNDARY (unchanged)
     map.addSource('boundary', { type: 'geojson', data: boundaryData });
     map.addLayer({
@@ -810,6 +1139,8 @@ setTimeout(() => {
     log('Map load error: ' + (err && err.message ? err.message : err));
   }
 });
+
+
 
 /* cursor hover */
 map.on('mousemove', (e) => {
@@ -2152,5 +2483,4 @@ document.getElementById('exportPNG').addEventListener('click', exportMapPNG);
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBwJnprg61M8EWryIBQxT1_f3qxueLfQic&v=weekly" async defer></script>
 </body>
 </html>
-
 
