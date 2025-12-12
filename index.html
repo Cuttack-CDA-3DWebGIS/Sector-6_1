@@ -150,6 +150,8 @@ button.btnSearch{padding:10px 12px;border-radius:8px;border:none;background:#2b6
   display: block;
 }
 
+
+
 </style>
 </head>
 <body>
@@ -214,6 +216,7 @@ button.btnSearch{padding:10px 12px;border-radius:8px;border:none;background:#2b6
           <button id="btnMeasure" class="tc-btn white" title="Measure">Measure</button>
           <button id="btnExport" class="tc-btn white" title="Export PNG">Export</button>
           <button id="btnLayers" class="tc-btn white" title="Layers">Layers</button>
+		  <button id="btnLegend" class="tc-btn white">Legend</button>
           <!-- NEW: Street View button -->
           <button id="btnStreetView" class="tc-btn white" title="Open Street View">Street View</button>
         </div>
@@ -223,10 +226,13 @@ button.btnSearch{padding:10px 12px;border-radius:8px;border:none;background:#2b6
       <div id="layerList">
         <label><input type="checkbox" id="toggleBuildings" checked> Buildings</label>
         <label><input type="checkbox" id="toggleRoads" checked> Roads</label>
-        <label><input type="checkbox" id="toggleDrone" checked> Drone Image</label>
+		 <label><input type="checkbox" id="toggleLanduse" checked> Landuse</label>
+		         <label><input type="checkbox" id="toggleDrone" checked> Drone Image</label>
         <label><input type="checkbox" id="toggleStreet" checked> Street Lights</label>
       </div>
     </div>
+	
+
 
     <div id="rightPanel" class="rightPanel-hidden" role="region" aria-label="Information">
       <button onclick="closeRightPanel()" style="float:right;">✖</button>
@@ -238,6 +244,23 @@ button.btnSearch{padding:10px 12px;border-radius:8px;border:none;background:#2b6
       </div>
     </div>
   </div>
+
+<!-- Floating Legend Panel -->
+<div id="legendPanel" 
+     style="display:none; position:absolute; top:80px; right:20px;
+            width:260px; background:#fff; padding:12px 16px;
+            border-radius:10px; box-shadow:0 6px 28px rgba(0,0,0,0.25);
+            z-index:5000; font-size:13px;">
+  
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div style="font-weight:700; font-size:15px; color:#0b63b8;">Landuse Legend</div>
+    <button id="closeLegend" 
+            style="background:none; border:none; font-size:20px; cursor:pointer;">×</button>
+  </div>
+
+  <div id="legendItems" style="margin-top:10px;"></div>
+</div>
+
 
   <!-- Street View Panel -->
   <div id="streetviewPanel" role="dialog" aria-label="Street View panorama">
@@ -758,78 +781,7 @@ setTimeout(() => {
   } catch (e) { console.warn(e); }
 }, 800);
 
-// ---------------- LANDUSE (robust add + ordering) ----------------
-(async function addLanduseSafely(){
-  const landuseUrl = "https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Landuse.geojson";
-  try {
-    const resp = await fetch(landuseUrl);
-    if (!resp.ok) throw new Error('Landuse fetch failed: ' + resp.status);
-    const landGeo = await resp.json();
 
-    // add source (or setData if it already exists)
-    if (!map.getSource('landuse')) {
-      map.addSource('landuse', { type: 'geojson', data: landGeo });
-    } else {
-      map.getSource('landuse').setData(landGeo);
-    }
-
-    // prepare layer definition (no guaranteed insertion point)
-    const landLayerDef = {
-      id: "landuse-fill",
-      type: "fill",
-      source: "landuse",
-      paint: {
-        "fill-color": [
-          "match",
-          ["get", "Class"],
-          "Residential",             "#A8E6A3",
-          "Commercial",              "#FF7676",
-          "Educational",             "#FFD84D",
-          "Govt",                    "#B27CFF",
-          "Public and semi public",  "#72D2A6",
-          "Recreational",            "#6EC9FF",
-          "Transportation",          "#E7A36F",
-          "Vacant Land",             "#F4E7A1",
-          "Waterbodies",             "#4DC3FF",
-          /* default */              "#CCCCCC"
-        ],
-        "fill-opacity": 1
-      }
-    };
-
-    // Try to insert before buildings-3d if it already exists
-    if (map.getLayer('buildings-3d')) {
-      try {
-        map.addLayer(landLayerDef, 'buildings-3d'); // insert below buildings
-      } catch (e) {
-        console.warn('Add landuse before buildings failed, adding without target:', e);
-        map.addLayer(landLayerDef);
-      }
-    } else {
-      // buildings not present yet — add layer now, and once buildings are added move landuse below them
-      try { map.addLayer(landLayerDef); } catch(e){ console.warn('Add landuse failed:', e); }
-
-      // when buildings layer appears later, ensure correct order
-      map.on('data', function checkAndMove(e) {
-        // listen until buildings source/layer is ready
-        if (map.getLayer('buildings-3d')) {
-          try {
-            map.moveLayer('landuse-fill', 'buildings-3d'); // move landuse under buildings
-            console.log('Moved landuse-fill before buildings-3d');
-          } catch (err) {
-            console.warn('Could not move landuse-fill:', err);
-          }
-          // remove this listener (only need once)
-          map.off('data', checkAndMove);
-        }
-      });
-    }
-
-    console.log('Landuse added (features:', (landGeo.features||[]).length, ')');
-  } catch (err) {
-    console.error('Landuse load/add error:', err);
-  }
-})();
 
 
 
@@ -1503,6 +1455,25 @@ document.getElementById('btnLayers').addEventListener('click', ()=>{ const el=do
 document.getElementById('toggleBuildings').addEventListener('change', function(){ const v=this.checked?'visible':'none'; if(map.getLayer('buildings-3d')) map.setLayoutProperty('buildings-3d','visibility',v); if(v==='none'){ clearSelectedFeature(); document.getElementById('searchRow').style.display='none'; document.getElementById('s_total_res').style.display=''; } });
 document.getElementById('toggleRoads').addEventListener('change', function(){ const v=this.checked?'visible':'none'; if(map.getLayer('roads-3d')) map.setLayoutProperty('roads-3d','visibility',v); });
 document.getElementById('toggleStreet').addEventListener('change', function(){ const v=this.checked?'visible':'none'; if(map.getLayer('street-point')) map.setLayoutProperty('street-point','visibility',v); });
+// === LANDUSE TOGGLE ===
+document.getElementById('toggleLanduse').addEventListener('change', function () {
+  const visible = this.checked ? 'visible' : 'none';
+
+  // Landuse fill layer
+  if (map.getLayer('landuse-fill')) {
+    map.setLayoutProperty('landuse-fill', 'visibility', visible);
+  }
+
+  // Landuse outline (optional, if you have it)
+  if (map.getLayer('landuse-outline')) {
+    map.setLayoutProperty('landuse-outline', 'visibility', visible);
+  }
+
+  // Legend show/hide
+  const lg = document.getElementById("layerLegend");
+  if (lg) lg.style.display = this.checked ? 'block' : 'none';
+});
+
 
 document.getElementById('toggleDrone').addEventListener('change', function(){
   const checkbox = this;
@@ -1515,12 +1486,417 @@ document.getElementById('toggleDrone').addEventListener('change', function(){
   }
 });
 
-/* keep data in sync if source updates */
-map.on('sourcedata', (e)=> {
-  if (e.sourceId==='buildings' && e.isSourceLoaded) {
-    try { const src=map.getSource('buildings'); if(src && src._data){ buildingsData=src._data; updateTotalResidential(); updatePrimaryStat(currentField, {}); } } catch(err){}
+
+
+// ---------------- LANDUSE (robust add + ordering) ----------------
+(async function addLanduseSafely(){
+  const landuseUrl = "https://raw.githubusercontent.com/Cuttack-CDA-3DWebGIS/Sector-6_1/main/Sec6_Landuse.geojson";
+  try {
+    const resp = await fetch(landuseUrl);
+    if (!resp.ok) throw new Error('Landuse fetch failed: ' + resp.status);
+    const landGeo = await resp.json();
+
+    // add or update source
+    if (!map.getSource('landuse')) {
+      map.addSource('landuse', { type: 'geojson', data: landGeo });
+    } else {
+      map.getSource('landuse').setData(landGeo);
+    }
+
+    // ---------- BASE EXTRUSION LAYER (color by Class, small heights) ----------
+    const landLayerDef = {
+      id: "landuse-extrusion",
+      type: "fill-extrusion",
+      source: "landuse",
+      paint: {
+        "fill-extrusion-color": [
+          "match", ["get", "Class"],
+          "Residential", "#FB9A99",
+          "Commercial", "#ff00ff",
+          "Educational", "#FDBF6F",
+          "Public and semi public", "#A6CEE3",
+          "Recreational", "#B2DF8A",
+          "Transportation", "#BEBEBE",
+          "Vacant Land", "#9F7FBE",
+          "Waterbodies", "#1F78B4",
+          /* default */ "#CCCCCC"
+        ],
+        "fill-extrusion-height": [
+          "match", ["get", "Class"],
+          "Residential", 1.5,
+          "Commercial", 2.5,
+          "Educational", 2.0,
+          "Public and semi public", 2.0,
+          "Recreational", 1.0,
+          "Transportation", 0.5,
+          "Vacant Land", 0.3,
+          "Waterbodies", 0.1,
+          /* default */ 0.5
+        ],
+        "fill-extrusion-base": 0,
+        "fill-extrusion-opacity": 0.95,
+        "fill-extrusion-vertical-gradient": false
+      }
+    };
+
+    // add base layer (prefer below buildings-3d)
+    if (map.getLayer('buildings-3d')) {
+      try { map.addLayer(landLayerDef, 'buildings-3d'); }
+      catch (e) { console.warn('Add landuse before buildings failed, adding without target:', e); map.addLayer(landLayerDef); }
+    } else {
+      try { map.addLayer(landLayerDef); } catch(e){ console.warn('Add landuse failed:', e); }
+      // try to move later when buildings appear
+      map.on('data', function checkAndMove() {
+        if (map.getLayer('landuse-extrusion') && map.getLayer('buildings-3d')) {
+          try { map.moveLayer('landuse-extrusion', 'buildings-3d'); console.log('Moved landuse-extrusion before buildings-3d'); }
+          catch (err) { console.warn('Could not move landuse-extrusion:', err); }
+          map.off('data', checkAndMove);
+        }
+      });
+    }
+
+    // ---------- HELPER SOURCES for hover + selected ----------
+    if (!map.getSource('landuse-hover-src')) {
+      map.addSource('landuse-hover-src', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    if (!map.getSource('landuse-selected-src')) {
+      map.addSource('landuse-selected-src', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+
+    // ---------- HELPER LAYERS ----------
+    // Hover extrusion (subtle pale yellow, slightly higher than base)
+    if (!map.getLayer('landuse-hover-extrusion')) {
+      map.addLayer({
+        id: 'landuse-hover-extrusion',
+        type: 'fill-extrusion',
+        source: 'landuse-hover-src',
+        paint: {
+          'fill-extrusion-color': '#FFF5A8',
+          'fill-extrusion-height': [
+            "match", ["get", "Class"],
+            "Residential", 2.0,
+            "Commercial", 3.0,
+            "Educational", 2.5,
+            "Public and semi public", 2.5,
+            "Recreational", 1.5,
+            "Transportation", 1.0,
+            "Vacant Land", 0.6,
+            "Waterbodies", 0.2,
+            /* default */ 0.8
+          ],
+          'fill-extrusion-opacity': 0.45,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-vertical-gradient': false
+        },
+        layout: { visibility: 'visible' }
+      });
+    }
+
+    // Selected extrusion (strong yellow, no outline)
+    if (!map.getLayer('landuse-selected-extrusion')) {
+      map.addLayer({
+        id: 'landuse-selected-extrusion',
+        type: 'fill-extrusion',
+        source: 'landuse-selected-src',
+        paint: {
+          'fill-extrusion-color': '#FFD400',
+          'fill-extrusion-height': [
+            "match", ["get", "Class"],
+            "Residential", 2.6,
+            "Commercial", 4.0,
+            "Educational", 3.0,
+            "Public and semi public", 3.0,
+            "Recreational", 1.8,
+            "Transportation", 1.2,
+            "Vacant Land", 0.8,
+            "Waterbodies", -1.0,
+            /* default */ 1.0
+          ],
+          'fill-extrusion-opacity': 0.75,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-vertical-gradient': false
+        },
+        layout: { visibility: 'visible' }
+      });
+    }
+
+    // try to ensure the helper layers are above the base (best-effort)
+    try {
+      ['landuse-hover-extrusion','landuse-selected-extrusion'].forEach(id => { if (map.getLayer(id)) try { map.moveLayer(id); } catch(e){} });
+    } catch(e){}
+
+    // ---------- helpers to set helper sources ----------
+    function setLanduseHoverFeature(feat) {
+      try {
+        const src = map.getSource('landuse-hover-src');
+        if (!src) return;
+        src.setData(feat ? { type:'FeatureCollection', features:[feat] } : { type:'FeatureCollection', features:[] });
+      } catch(e){ console.warn('setLanduseHoverFeature', e); }
+    }
+    function setLanduseSelectedFeature(feat) {
+      try {
+        const src = map.getSource('landuse-selected-src');
+        if (!src) return;
+        src.setData(feat ? { type:'FeatureCollection', features:[feat] } : { type:'FeatureCollection', features:[] });
+      } catch(e){ console.warn('setLanduseSelectedFeature', e); }
+    }
+
+    // ---------- interactivity ----------
+    // pointer: show cursor & hover extrusion
+    map.on('mouseenter', 'landuse-extrusion', (e) => {
+      try {
+        map.getCanvas().style.cursor = 'pointer';
+        const feat = e?.features?.[0] ?? null;
+        if (!feat) { setLanduseHoverFeature(null); return; }
+        setLanduseHoverFeature({ type:'Feature', geometry: feat.geometry, properties: feat.properties || {} });
+      } catch(e){ console.warn('mouseenter landuse-extrusion', e); }
+    });
+    map.on('mousemove', 'landuse-extrusion', (e) => {
+      try {
+        const feat = e?.features?.[0] ?? null;
+        if (!feat) { setLanduseHoverFeature(null); return; }
+        setLanduseHoverFeature({ type:'Feature', geometry: feat.geometry, properties: feat.properties || {} });
+      } catch(e){}
+    });
+    map.on('mouseleave', 'landuse-extrusion', () => {
+      try { map.getCanvas().style.cursor = ''; setLanduseHoverFeature(null); } catch(e){}
+    });
+
+    // click: set selected yellow extrusion, populate right panel and open it
+    map.on('click', 'landuse-extrusion', (e) => {
+      try {
+        const feat = e?.features?.[0] ?? null;
+        if (!feat) { setLanduseSelectedFeature(null); return; }
+
+        // set selected extrusion (yellow)
+        setLanduseSelectedFeature({ type:'Feature', geometry: feat.geometry, properties: feat.properties || {} });
+
+        // populate right panel and open it (your fillRightPanel wrapper supports 'landuse')
+        try { fillRightPanel('landuse', feat.properties || {}); } catch(err){}
+        try { openRightPanel(); } catch(err){}
+
+        // optional: pan slightly to make it visible (comment out if you don't want auto pan)
+        try {
+          let center = null;
+          if (feat.geometry) {
+            if (feat.geometry.type === 'Polygon') center = feat.geometry.coordinates[0][0];
+            else if (feat.geometry.type === 'MultiPolygon') center = feat.geometry.coordinates[0][0][0];
+            else if (feat.geometry.type === 'Point') center = feat.geometry.coordinates;
+            if (center) map.easeTo({ center: center, zoom: Math.max(map.getZoom(), 17), duration: 600 });
+          }
+        } catch(e){}
+      } catch(err){ console.warn('click landuse-extrusion', err); }
+    });
+
+    // clear hover/selection on ESC
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' || ev.key === 'Esc') {
+        try { setLanduseHoverFeature(null); setLanduseSelectedFeature(null); } catch(e){}
+      }
+    });
+
+    console.log('Landuse added (features:', (landGeo.features||[]).length, ')');
+  } catch (err) {
+    console.error('Landuse load/add error:', err);
   }
-});
+})(); // end addLanduseSafely
+
+// ---------------- Show exact landuse fields in right panel ----------------
+// fields to show in the right panel for landuse (exact keys: Class, Name, AREA)
+const landuseFields = [
+  ['Class', 'Landuse Class'],
+  ['Name',  'Name'],
+  ['AREA',  'Area (sq Ft)']
+];
+
+// Extend fillRightPanel to support landuse (wrap existing function)
+(function extendFillRightPanelForLanduse(){
+  const origFill = fillRightPanel;
+  fillRightPanel = function(type, props) {
+    if (type === 'landuse') {
+      const title = document.getElementById('infoTitle');
+      const table = document.getElementById('infoTable');
+      const infoTypeLine = document.getElementById('infoTypeLine');
+      if (!table || !title || !infoTypeLine) return;
+
+      table.innerHTML = '';
+      title.textContent = 'Landuse Details';
+      infoTypeLine.textContent = 'Layer: LANDUSE';
+
+      for (const [key, label] of landuseFields) {
+        const val = getProp(props, key);
+        const tr = document.createElement('tr');
+        const tdKey = document.createElement('td'); tdKey.className = 'key'; tdKey.textContent = label;
+        const tdVal = document.createElement('td'); tdVal.className = 'value';
+        tdVal.textContent = (val !== null && val !== undefined && String(val).trim() !== '') ? String(val) : 'N/A';
+        tr.appendChild(tdKey);
+        tr.appendChild(tdVal);
+        table.appendChild(tr);
+      }
+      return;
+    }
+    return origFill(type, props);
+  };
+})();
+
+// ---------------- LANDUSE TOGGLE + LEGEND WIRING (robust) ----------------
+(function wireLanduseToggleAndLegend() {
+  const ctl = document.getElementById('toggleLanduse');
+  const legendRows = document.getElementById('legend-rows'); // small side legend
+  const legendItems = document.getElementById('legendItems'); // floating legend content container
+  const legendPanel = document.getElementById('legendPanel'); // floating legend panel
+  const btnLegend = document.getElementById('btnLegend');      // top toolbar Legend button
+  const closeLegend = document.getElementById('closeLegend');  // X button inside floating panel
+
+  if (!ctl) {
+    console.warn('toggleLanduse control not found — skipping landuse wiring');
+    return;
+  }
+
+  // Landuse palette (keep in sync with your landuse layer expression)
+  const landuseColors = {
+    "Residential": "#FB9A99",
+    "Commercial": "#ff00ff",
+    "Educational": "#FDBF6F",
+    "Public and semi public": "#A6CEE3",
+    "Recreational": "#B2DF8A",
+    "Transportation": "#BEBEBE",
+    "Vacant Land": "#9F7FBE",
+    "Waterbodies": "#1F78B4"
+  };
+
+  // Helper: render small side legend
+  if (legendRows) {
+    legendRows.innerHTML = '';
+    Object.entries(landuseColors).forEach(([name, color]) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '8px';
+      row.style.padding = '4px 0';
+      row.innerHTML = `<div style="width:18px;height:12px;border-radius:3px;background:${color};border:1px solid rgba(0,0,0,0.06)"></div>
+                       <div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>`;
+      legendRows.appendChild(row);
+    });
+  }
+
+  // Helper: build floating legend panel if present
+  function buildLegendItems() {
+    if (!legendItems) return;
+    legendItems.innerHTML = '';
+    Object.entries(landuseColors).forEach(([name, color]) => {
+      const row = document.createElement('div');
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.marginBottom = "6px";
+      row.innerHTML = `
+        <div style="width:16px; height:16px; background:${color}; border-radius:3px; margin-right:8px; border:1px solid rgba(0,0,0,0.06)"></div>
+        <div style="font-weight:600">${name}</div>
+      `;
+      legendItems.appendChild(row);
+    });
+  }
+  buildLegendItems();
+
+  // Wire floating legend open/close
+  if (btnLegend && legendPanel) {
+    btnLegend.addEventListener('click', () => {
+      legendPanel.style.display = 'block';
+      try { legendPanel.focus && legendPanel.focus(); } catch(e) {}
+    });
+  }
+  if (closeLegend && legendPanel) {
+    closeLegend.addEventListener('click', () => { legendPanel.style.display = 'none'; });
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { try { if (legendPanel) legendPanel.style.display = 'none'; } catch(e){} } });
+
+  // Layers we want to toggle (match the IDs you used for landuse layers)
+  const LA_IDS = ['landuse-extrusion', 'landuse-hover-extrusion', 'landuse-selected-extrusion'];
+
+  // store desired state in case layers are not added yet
+  let desiredVisible = ctl.checked ? 'visible' : 'none';
+
+  // apply visibility to a layer id if it exists
+  function applyVisibilityToLayerId(id, vis) {
+    try {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, 'visibility', vis);
+      }
+    } catch (e) { console.warn('applyVisibilityToLayerId error for', id, e); }
+  }
+
+  // Primary toggle handler
+  ctl.addEventListener('change', function () {
+    const vis = this.checked ? 'visible' : 'none';
+    desiredVisible = vis;
+
+    // toggle all known landuse-related layers
+    LA_IDS.forEach(id => applyVisibilityToLayerId(id, vis));
+
+    // toggle the small side legend
+    try {
+      const lg = document.getElementById('layerLegend');
+      if (lg) lg.style.display = this.checked ? 'block' : 'none';
+    } catch (e) {}
+
+    // If you want floating legend to auto-open when turned on, uncomment:
+    // if (vis === 'visible' && legendPanel) legendPanel.style.display = 'block';
+  });
+
+  // Sync function: apply desiredVisible to layers when they appear (useful on style reload)
+  function syncLanduseVisibility() {
+    try {
+      LA_IDS.forEach(id => {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, 'visibility', desiredVisible);
+        }
+      });
+      // also sync small legend visibility
+      const lg = document.getElementById('layerLegend');
+      if (lg) lg.style.display = (desiredVisible === 'visible') ? 'block' : 'none';
+    } catch (e) { console.warn('syncLanduseVisibility failed', e); }
+  }
+
+  // Keep checkbox in sync when style / layers change (e.g. style reload)
+  map.on('styledata', () => {
+    try {
+      // if base layer exists, read its visibility to sync ctl
+      const base = map.getLayer('landuse-extrusion');
+      if (base) {
+        const vis = map.getLayoutProperty('landuse-extrusion', 'visibility') || 'visible';
+        desiredVisible = vis;
+        ctl.checked = (vis !== 'none');
+      } else {
+        // if base not present, keep ctl as last desired state (no change)
+        ctl.checked = (desiredVisible !== 'none');
+      }
+      // also ensure helper layers follow desired state
+      syncLanduseVisibility();
+    } catch (e) { console.warn('styledata handler error', e); }
+  });
+
+  // Also try to apply desired state once on initial load (in case layer already added)
+  setTimeout(() => {
+    try { syncLanduseVisibility(); } catch(e) {}
+  }, 700);
+
+  // When layers are later added (some code add layers after fetch) we try to sync again on 'data' events
+  map.on('data', (e) => {
+    if (!e || !e.source) return;
+    // If landuse source loaded OR layers possibly added, attempt sync
+    if (e.source === 'landuse' || e.dataType === 'source' || e.dataType === 'style') {
+      try { syncLanduseVisibility(); } catch(e) {}
+    }
+  });
+
+  // final safety: ensure the small legend visibility matches current toggle on startup
+  try {
+    const lg = document.getElementById('layerLegend');
+    if (lg) lg.style.display = ctl.checked ? 'block' : 'none';
+  } catch(e){}
+
+})(); // end wireLanduseToggleAndLegend
+
 
 /* --- STREET VIEW: new functions & event handlers --- */
 
@@ -2475,12 +2851,15 @@ ctx.fillText(footerText, ftX, ftY);
     alert('Export failed: ' + (err && err.message ? err.message : err));
   }
 }
+
+// your JS code
 document.getElementById('exportPNG').addEventListener('click', exportMapPNG);
 </script>
 
-
-<!-- LOAD Google Maps JS API (Maps + Street View). Keep KEY restricted to your domain. -->
+<!-- Now put Google Maps script OUTSIDE JavaScript -->
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBwJnprg61M8EWryIBQxT1_f3qxueLfQic&v=weekly" async defer></script>
+
 </body>
 </html>
+
 
