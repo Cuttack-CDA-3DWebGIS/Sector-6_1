@@ -813,13 +813,152 @@ setTimeout(() => {
 
     // icons (same shapes as before)
     const svgIcons = {
-      'loc-atm': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#2b6cb0"/><text x="50%" y="55%" font-size="26" fill="#fff" font-family="Arial" text-anchor="middle" alignment-baseline="middle">₹</text></svg>`,
-      'loc-bank': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#1f9d55"/><path d="M10 44 L54 44 L32 14 Z" fill="#fff" opacity="0.95"/></svg>`,
-      'loc-govt': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#8b5cf6"/><path d="M12 44 L52 44 L32 20 Z" fill="#fff"/></svg>`,
-      'loc-hospital': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#e53e3e"/><rect x="24" y="14" width="16" height="36" rx="2" fill="#fff"/></svg>`,
-      'loc-recreational': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#16a34a"/><circle cx="32" cy="26" r="8" fill="#fff"/></svg>`,
-      'loc-school': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#f59e0b"/><path d="M8 30 L32 14 L56 30 L32 46 Z" fill="#fff"/></svg>`,
-      'loc-temple': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#d97706"/><path d="M12 44 L52 44 L44 28 L20 28 Z" fill="#fff"/></svg>`,
+    'loc-atm': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <rect rx="12" width="64" height="64" fill="#00A884"/>
+  <text x="50%" y="55%"
+        font-size="26"
+        fill="#FFFFFF"
+        font-family="Arial"
+        font-weight="700"
+        text-anchor="middle"
+        alignment-baseline="middle">
+    ATM
+  </text>
+</svg>
+`,
+
+'loc-bank': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Background box -->
+  <rect rx="12" width="64" height="64" fill="#00A884"/>
+
+  <!-- Bank pillars + roof -->
+  <path d="M16 40 H48 
+           M20 40 V26 
+           M28 40 V26 
+           M36 40 V26 
+           M44 40 V26 
+           M16 26 L32 16 L48 26"
+        stroke="#FFFFFF"
+        stroke-width="4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"/>
+</svg>
+`,
+
+
+'loc-govt': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Government blue background -->
+  <rect x="0" y="0" width="64" height="64" rx="12" fill="#2563EB"/>
+
+  <!-- Government office/house outline -->
+  <path d="
+      M16 36 
+      L32 20 
+      L48 36 
+      V48 
+      H16 
+      Z
+      M26 48 V36
+      M38 48 V36
+  "
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="4"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+</svg>
+`,
+
+    
+     
+	 'loc-hospital': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Red background -->
+  <rect rx="12" width="64" height="64" fill="#E53E3E"/>
+  
+  <!-- Medical cross -->
+  <path d="M28 16 H36 V28 H48 V36 H36 V48 H28 V36 H16 V28 H28 Z"
+        fill="#FFFFFF"/>
+</svg>
+`,
+
+'loc-recreational': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Filled background -->
+  <rect rx="12" width="64" height="64" fill="#F4B400"/>
+
+  <!-- White tree symbol -->
+  <path d="M32 14 
+           L20 34 
+           H28 
+           L22 46 
+           H42 
+           L36 34 
+           H44 
+           Z"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="4"
+        stroke-linejoin="round"
+        stroke-linecap="round"/>
+</svg>
+`,
+
+'loc-school': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Filled purple background -->
+  <rect rx="12" width="64" height="64" fill="#8B5CF6"/>
+
+  <!-- White graduation cap -->
+  <path d="M16 30 L32 22 L48 30 L32 38 Z 
+           M24 34 V44 
+           M40 34 V44"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="4"
+        stroke-linejoin="round"
+        stroke-linecap="round"/>
+</svg>
+`,
+
+'loc-temple': `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Saffron background -->
+  <rect x="0" y="0" width="64" height="64" rx="10" fill="#F59E0B"/>
+
+  <!-- Temple flag pole -->
+  <rect x="31.2" y="6" width="2" height="10" fill="#FFFFFF"/>
+
+  <!-- Temple flag (saffron) -->
+  <path d="M33 6 L42 10 L33 14 Z" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.8"/>
+
+  <!-- Tiny finial under flag -->
+  <circle cx="32" cy="16" r="1.6" fill="#FFFFFF"/>
+
+  <!-- Top tier -->
+  <path d="M32 18 L24 26 H40 Z" fill="#FFFFFF"/>
+
+  <!-- Middle tier -->
+  <path d="M22 28 L16 36 H48 L42 28 Z" fill="#FFFFFF"/>
+
+  <!-- Base shape -->
+  <rect x="18" y="36" width="28" height="18" rx="2" fill="#FFFFFF"/>
+
+  <!-- Doorway -->
+  <rect x="28" y="40" width="8" height="12" rx="1.5" fill="#F59E0B"/>
+
+  <!-- Decorative side lines -->
+  <path d="M26 44 v6" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M38 44 v6" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
+`,
+
+
       'loc-default': `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="10" width="64" height="64" fill="#6b7280"/><text x="50%" y="54%" font-size="20" fill="#fff" font-family="Arial" text-anchor="middle" alignment-baseline="middle">•</text></svg>`
     };
 
@@ -2861,5 +3000,4 @@ document.getElementById('exportPNG').addEventListener('click', exportMapPNG);
 
 </body>
 </html>
-
 
